@@ -12,6 +12,6 @@ typedef struct
 
 static void R_Init(R_State *state);
 static void R_WireRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour);
-static void R_FillRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour);
+void R_FillRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour);
 
 #endif //RENDERER_H

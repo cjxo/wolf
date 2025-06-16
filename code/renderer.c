@@ -109,6 +109,7 @@ R_WireRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour)
     }
 }
 
+#if 0
 static void
 R_FillRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour)
 {
@@ -163,3 +164,4 @@ R_FillRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour)
         Pixels += Pitch;
     }
 }
+#endif

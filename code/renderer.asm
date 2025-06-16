@@ -1,4 +1,151 @@
 .code
+
+; rcx = RState
+; edx = X
+; r8d = Y
+; r9d = W
+; H
+; Colour
+R_WireRectangle proc
+	sub rsp, 40
+	; rcx = RState
+	; edx = XStart = X
+	; r8d = YStart = Y
+	; r9d = XEnd = X + W
+	; [rsp + 80] = YEnd = Y + H
+	; [rsp + 0] = XEnd2 = XEnd
+	; [rsp + 4] = YEnd2 = YEnd
+	; [rsp + 8] = Pitch
+
+	cmp r9d, 0
+	jle done
+	cmp dword ptr [rsp + 80], 0
+	jle done
+
+	mov eax, dword ptr [rcx + 8]
+	dec eax
+	mov dword ptr [rsp + 8], eax
+	mov eax, dword ptr [rcx + 12]
+	dec eax
+	mov dword ptr [rsp + 12], eax
+
+	xor rax, rax
+	add r9d, edx                     ; XEnd
+	mov dword ptr [rsp + 0], r9d     ; XEnd2
+	add dword ptr [rsp + 80], r8d    ; YEnd
+	mov eax, dword ptr [rsp + 80]
+	mov dword ptr [rsp + 4], eax     ; YEnd2
+
+	cmp edx, dword ptr [rcx + 8]
+	jge done
+	cmp r8d, dword ptr [rcx + 12]
+	jge done
+	cmp r9d, 0
+	jl done
+	cmp dword ptr [rsp + 4], 0
+	jl done
+
+	xor eax, eax
+	cmp edx, 0
+	cmovl edx, eax
+	cmp r8d, 0
+	cmovl r8d, eax
+	
+	cmp r9d, dword ptr [rcx + 8]
+	cmovge r9d, dword ptr [rsp + 8]
+
+	mov eax, dword ptr [rsp + 80]
+	cmp eax, dword ptr [rcx + 12]
+	cmovge eax, dword ptr [rsp + 12]
+	mov dword ptr [rsp + 80], eax
+	
+	mov eax, dword ptr [rcx + 8]
+	shl rax, 2
+	mov qword ptr [rsp + 16], rax
+	
+	mov dword ptr [rsp + 24], edx
+	mov eax, dword ptr [rcx + 8]
+	mul r8d
+	add eax, dword ptr [rsp + 24]
+	shl eax, 2
+	add rax, qword ptr [rcx]
+	mov r10, rax
+
+	cmp r8d, 0
+	jl x_ge_0
+	mov r11, r10
+	mov edx, dword ptr [rsp + 24]
+	mov eax, dword ptr [rsp + 88]
+	jmp y_ge_0_test
+y_ge_0_loop:
+	inc edx
+	mov dword ptr [r11], eax
+	add r11, 4
+y_ge_0_test:
+	cmp edx, r9d
+	jle y_ge_0_loop
+
+x_ge_0:
+	cmp dword ptr [rsp + 24], 0
+	jl xend_l_width
+	mov r11, r10
+	mov edx, r8d
+	jmp x_ge_0_test
+x_ge_0_loop:
+	inc edx
+	mov dword ptr [r11], eax
+	add r11, qword ptr [rsp + 16]
+x_ge_0_test:
+	cmp edx, dword ptr [rsp + 80]
+	jle x_ge_0_loop
+
+xend_l_width:
+	mov eax, [rcx + 8]
+	cmp dword ptr [rsp + 0], eax
+	jge yend_l_height
+
+	mov eax, r9d
+	sub eax, dword ptr [rsp + 24]
+	shl rax, 2
+	mov r11, r10
+	add r11, rax
+	mov eax, dword ptr [rsp + 88]
+	mov edx, r8d
+	jmp xend_l_width_test
+xend_l_width_loop:
+	inc edx
+	mov dword ptr [r11], eax
+	add r11, qword ptr [rsp + 16]
+xend_l_width_test:
+	cmp edx, dword ptr [rsp + 80]
+	jle xend_l_width_loop
+
+yend_l_height:
+	mov eax, dword ptr [rcx + 12]
+	cmp dword ptr [rsp + 4], eax
+	jge done
+
+	mov eax, dword ptr [rsp + 80]
+	sub eax, r8d
+	mul qword ptr [rsp + 16]
+	mov r11, r10
+	add r11, rax
+	mov eax, dword ptr [rsp + 88]
+	mov edx, dword ptr [rsp + 24]
+	jmp yend_l_height_test
+yend_l_height_loop:
+	inc edx
+	mov dword ptr [r11], eax
+	add r11, 4
+yend_l_height_test:
+	cmp edx, r9d
+	jle yend_l_height_loop
+
+done:
+	add rsp, 40
+	ret
+R_WireRectangle endp
+
 ; rcx = RState
 ; edx = X
 ; r8d = Y
@@ -15,21 +162,25 @@ R_FillRectangle proc
 	add r9d, edx
 	add dword ptr [rsp + 80], r8d
 
+	mov eax, dword ptr [rcx + 8]
+	dec eax
+	mov dword ptr [rsp + 12], eax
+
+	mov eax, dword ptr [rcx + 12]
+	dec eax
+	mov dword ptr [rsp + 16], eax
+
 	xor rax, rax
 	cmp edx, 0
 	cmovl edx, eax
 	cmp r8d, 0
-	cmovl r9d, eax
-	mov eax, dword ptr [rcx + 8]
-	dec eax
-	cmp r9d, eax
-	cmovge r9d, eax
-	mov eax, dword ptr [rcx + 12]
-	dec eax
-	mov r10d, dword ptr [rsp + 80]
-	cmp r10d, eax
-	cmovge r10d, eax
-	mov dword ptr [rsp + 80], r10d
+	cmovl r8d, eax
+	cmp r9d, dword ptr [rcx + 8]
+	cmovge r9d, dword ptr [rsp + 12]
+	mov eax, dword ptr [rsp + 80]
+	cmp eax, dword ptr [rcx + 12]
+	cmovge eax, dword ptr [rsp + 16]
+	mov dword ptr [rsp + 80], eax
 
 	mov eax, dword ptr [rcx + 8]
 	shl rax, 2

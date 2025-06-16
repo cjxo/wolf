@@ -1,4 +1,3 @@
-
 static void
 R_Init(R_State *state)
 {
@@ -8,6 +7,7 @@ R_Init(R_State *state)
     state->Pixels = VirtualAlloc(0, Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 }
 
+#if 0
 static void
 R_WireRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour)
 {
@@ -108,6 +108,7 @@ R_WireRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour)
         }
     }
 }
+#endif
 
 #if 0
 static void

@@ -32,3 +32,17 @@ Math_Init(void)
         FixedCosTable[Angle] = f32_to_fixed_16_16(Result);
     }
 }
+
+static fixed_16_16
+Math_Cos(u32 Degrees)
+{
+    Degrees %= 360;
+    return FixedCosTable[Degrees];
+}
+
+static fixed_16_16
+Math_Sin(u32 Degrees)
+{
+    Degrees %= 360;
+    return FixedSinTable[Degrees];
+}

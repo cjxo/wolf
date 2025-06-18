@@ -25,6 +25,8 @@ enum
     INP_Key_Down,
     INP_Key_Left,
     INP_Key_Right,
+    INP_Key_Q,
+    INP_Key_E,
     INP_Key_Count,
 };
 
@@ -86,6 +88,16 @@ W32_WPARAMToINP_Key(WPARAM WParam)
         case VK_RIGHT:
         {
             Result = INP_Key_Right;
+        } break;
+        
+        case 'E':
+        {
+            Result = INP_Key_E;
+        } break;
+        
+        case 'Q':
+        {
+            Result = INP_Key_Q;
         } break;
         
         default:
@@ -162,7 +174,7 @@ EntryPoint(void)
     EnumDisplaySettingsA(0, ENUM_CURRENT_SETTINGS, &DevMode);
     u64 RefreshRate = DevMode.dmDisplayFrequency;
     u64 MSPerFrame = 1000 / RefreshRate;
-    fixed_16_16 GameUpdateS = f32_to_fixed_16_16(1.0f / (f32)MSPerFrame);
+    f32 GameUpdateS = (1.0f / (f32)MSPerFrame);
     
     LARGE_INTEGER PerformanceFrequency;
     QueryPerformanceFrequency(&PerformanceFrequency);
@@ -181,20 +193,18 @@ EntryPoint(void)
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     };
     
-    V2_Fixed PlayerP;
-    fixed_16_16 PlayerDegreesRot = 0;
-    fixed_16_16 RotRate = (50<<8)*(GameUpdateS>>8);
-    PlayerP.X = (8 << 16);
-    PlayerP.Y = (8 << 16);
+    v2 PlayerP = V2(8, 8);
+    f32 PlayerDegreesRot = 0;
+    f32 RotRate = 40.0f*GameUpdateS;
     
     forever
     {
@@ -239,54 +249,61 @@ EntryPoint(void)
         if (W32State.KeyFlags[INP_Key_Left] & INP_Flag_KeyHeld)
         {
             PlayerDegreesRot -= RotRate;
-            if ((PlayerDegreesRot>>16)<0)
+            if (PlayerDegreesRot < 0)
             {
-                PlayerDegreesRot = 360<<16;
+                PlayerDegreesRot = 360;
             }
         }
         
         if (W32State.KeyFlags[INP_Key_Right] & INP_Flag_KeyHeld)
         {
             PlayerDegreesRot += RotRate;
-            if ((PlayerDegreesRot>>16)>360)
+            if (PlayerDegreesRot>360)
             {
                 PlayerDegreesRot = 0;
             }
         }
         
-        fixed_16_16 RequestMoveX = 0;
-        fixed_16_16 RequestMoveY = 0;
+        f32 RequestMoveX = 0;
+        f32 RequestMoveY = 0;
+        
+        v2 PlayerDir = V2(Math_Cos((u32)PlayerDegreesRot),Math_Sin((u32)PlayerDegreesRot));
+        v2 PlayerCameraDir = V2(-PlayerDir.Y*0.66f, PlayerDir.X*0.66f);
         
         if (W32State.KeyFlags[INP_Key_Up] & INP_Flag_KeyHeld)
         {
-            V2_Fixed PlayerDir = {Math_Cos(PlayerDegreesRot>>16),Math_Sin(PlayerDegreesRot>>16)};
-            
-            RequestMoveX = fixed_16_16_mul(PlayerDir.X, 1<<16);
-            RequestMoveX = fixed_16_16_mul(RequestMoveX, GameUpdateS);
-            RequestMoveY = fixed_16_16_mul(PlayerDir.Y, 1<<16);
-            RequestMoveY = fixed_16_16_mul(RequestMoveY, GameUpdateS);
+            RequestMoveX = PlayerDir.X * 1 * GameUpdateS;
+            RequestMoveY = PlayerDir.Y * 1 * GameUpdateS;
+        }
+        
+        if (W32State.KeyFlags[INP_Key_Q] & INP_Flag_KeyHeld)
+        {
+            RequestMoveX = PlayerDir.Y * 1 * GameUpdateS;
+            RequestMoveY = -PlayerDir.X * 1 * GameUpdateS;
+        }
+        
+        if (W32State.KeyFlags[INP_Key_E] & INP_Flag_KeyHeld)
+        {
+            RequestMoveX = -PlayerDir.Y * 1 * GameUpdateS;
+            RequestMoveY = PlayerDir.X * 1 * GameUpdateS;
         }
         
         if (W32State.KeyFlags[INP_Key_Down] & INP_Flag_KeyHeld)
         {
-            V2_Fixed PlayerDir = {-Math_Cos(PlayerDegreesRot>>16),-Math_Sin(PlayerDegreesRot>>16)};
-            
-            RequestMoveX = fixed_16_16_mul(PlayerDir.X, 1<<16);
-            RequestMoveX = fixed_16_16_mul(RequestMoveX, GameUpdateS);
-            RequestMoveY = fixed_16_16_mul(PlayerDir.Y, 1<<16);
-            RequestMoveY = fixed_16_16_mul(RequestMoveY, GameUpdateS);
+            RequestMoveX = -PlayerDir.X * 1 * GameUpdateS;
+            RequestMoveY = -PlayerDir.Y * 1 * GameUpdateS;
         }
         
         if (RequestMoveY || RequestMoveX)
         {
-            s32 OldXIDX = PlayerP.X >> 16;
-            s32 OldYIDX = PlayerP.Y >> 16;
+            s32 OldXIDX = (s32)PlayerP.X;
+            s32 OldYIDX = (s32)PlayerP.Y;
             
-            fixed_16_16 X = PlayerP.X + RequestMoveX;
-            fixed_16_16 Y = PlayerP.Y + RequestMoveY;
+            f32 X = PlayerP.X + RequestMoveX;
+            f32 Y = PlayerP.Y + RequestMoveY;
             
-            s32 NewXIDX = X >> 16;
-            s32 NewYIDX = Y >> 16;
+            s32 NewXIDX = (s32)X;
+            s32 NewYIDX = (s32)Y;
             
             if ((NewXIDX < 16) && (NewYIDX < 16) && (NewXIDX >= 0) && (NewYIDX >= 0))
             {
@@ -294,6 +311,85 @@ EntryPoint(void)
                 {
                     PlayerP.X = X;
                     PlayerP.Y = Y;
+                }
+            }
+        }
+        
+        for (s32 ScreenX = 0; ScreenX < RState.Width; ++ScreenX)
+        {
+            f32 CameraX = (2.0f*((f32)ScreenX / (f32)RState.Width)) - 1.0f;
+            v2 RayDir = V2(PlayerDir.X + PlayerCameraDir.X * CameraX, 
+                           PlayerDir.Y + PlayerCameraDir.Y * CameraX);
+            
+            f32 DeltaDistX = Math_Abs(1.0f / RayDir.X);
+            f32 DeltaDistY = Math_Abs(1.0f / RayDir.Y);
+            v2 OffsetWithinCell;
+            s32 StepX, StepY, XSideHit = false;
+            
+            s32 RayXInt = (s32)PlayerP.X;
+            s32 RayYInt = (s32)PlayerP.Y;
+            
+            if (RayDir.X < 0)
+            {
+                StepX = -1;
+                OffsetWithinCell.X = (PlayerP.X - (f32)RayXInt) * DeltaDistX;
+            }
+            else
+            {
+                StepX = 1;
+                OffsetWithinCell.X = ((f32)RayXInt + 1.0f - PlayerP.X) * DeltaDistX;
+            }
+            
+            if (RayDir.Y < 0)
+            {
+                StepY = -1;
+                OffsetWithinCell.Y = (PlayerP.Y - (f32)RayYInt) * DeltaDistY;
+            }
+            else
+            {
+                StepY = 1;
+                OffsetWithinCell.Y = ((f32)RayYInt + 1.0f - PlayerP.Y) * DeltaDistY;
+            }
+            
+            f32 DistanceToWall = 0;
+            f32 MaxRaycastDepth = 16.0f;
+            while (DistanceToWall < MaxRaycastDepth)
+            {
+                if (OffsetWithinCell.X < OffsetWithinCell.Y)
+                {
+                    DistanceToWall = OffsetWithinCell.X;
+                    OffsetWithinCell.X += DeltaDistX;
+                    RayXInt += StepX;
+                    XSideHit = true;
+                }
+                else
+                {
+                    DistanceToWall = OffsetWithinCell.Y;
+                    OffsetWithinCell.Y += DeltaDistY;
+                    RayYInt += StepY;
+                    XSideHit = false;
+                }
+                
+                if (((RayXInt >= 0) && (RayXInt < 16)) && ((RayYInt >= 0) && (RayYInt < 16)) &&
+                    (GameGrid[RayYInt * 16 + RayXInt] != 0))
+                {
+                    s32 CellValue = GameGrid[RayYInt * 16 + RayXInt];
+                    u32 Colour = 0;
+                    switch (CellValue)
+                    {
+                        case 1: Colour = 0xffff0000; break;
+                        case 2: Colour = 0xff00ff00; break;
+                        invalid_default_case();
+                    }
+                    
+                    if (XSideHit) Colour &= 0x80808080;
+                    
+                    s32 WallHeight = (s32)((f32)RState.Height / DistanceToWall);
+                    s32 DrawStartY = (RState.Height - WallHeight) / 2;
+                    s32 DrawEndY = DrawStartY + WallHeight;
+                    
+                    R_VerticalLine(&RState, ScreenX, DrawStartY, DrawEndY, Colour);
+                    break;
                 }
             }
         }
@@ -313,7 +409,7 @@ EntryPoint(void)
                 switch (CellValue)
                 {
                     case 0: {} break;
-                    case 1: // Wall
+                    case 1: case 2:
                     {
                         R_FillRectangle(&RState, X + InnerRectDim/2, Y + InnerRectDim/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff0000ff);
                     } break;
@@ -324,12 +420,12 @@ EntryPoint(void)
         }
         
         {
-            s32 XCell = (PlayerP.X>>8);
-            s32 YCell = (PlayerP.Y>>8);
-            s32 X = (XCell*(CellDim<<8) + XCell*(Gap<<8))>>16;
-            s32 Y = (YCell*(CellDim<<8) + YCell*(Gap<<8))>>16;
+            f32 XCell = PlayerP.X;
+            f32 YCell = PlayerP.Y;
+            s32 X = (s32)(XCell*CellDim + XCell*Gap);
+            s32 Y = (s32)(YCell*CellDim + YCell*Gap);
             
-            R_FillRectangle(&RState, X + InnerRectDim/2, Y + InnerRectDim/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff00ff00);
+            R_FillRectangle(&RState, X + InnerRectDim/2 - (CellDim - InnerRectDim)/2, Y + InnerRectDim/2 - (CellDim - InnerRectDim)/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff00ff00);
         }
         
         HDC Hdc = GetDC(W32State.WindowHandle);

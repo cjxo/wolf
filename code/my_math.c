@@ -1,6 +1,6 @@
 #define trig_angle_count 360
-static fixed_16_16 FixedSinTable[trig_angle_count];
-static fixed_16_16 FixedCosTable[trig_angle_count];
+static f32 FixedSinTable[trig_angle_count];
+static f32 FixedCosTable[trig_angle_count];
 
 s32 _fltused;
 
@@ -26,23 +26,41 @@ Math_Init(void)
     {
         f32 Radians = (Angle * 3.1415926f)/180.0f;
         f32 Result = SineApprox(Radians);
-        FixedSinTable[Angle] = f32_to_fixed_16_16(Result);
+        FixedSinTable[Angle] = Result;
         
         Result = SineApprox(Radians + 3.1415926f*0.5f);
-        FixedCosTable[Angle] = f32_to_fixed_16_16(Result);
+        FixedCosTable[Angle] = Result;
     }
 }
 
-static fixed_16_16
+inline static f32
 Math_Cos(u32 Degrees)
 {
     Degrees %= 360;
     return FixedCosTable[Degrees];
 }
 
-static fixed_16_16
+inline static f32
 Math_Sin(u32 Degrees)
 {
     Degrees %= 360;
     return FixedSinTable[Degrees];
+}
+
+inline static f32
+Math_Abs(f32 f)
+{
+    union { f32 f; u32 n; } a;
+    a.f = f;
+    a.n &= ~0x80000000;
+    return(a.f);
+}
+
+inline static v2
+V2(f32 X, f32 Y)
+{
+    v2 Result;
+    Result.X = X;
+    Result.Y = Y;
+    return(Result);
 }

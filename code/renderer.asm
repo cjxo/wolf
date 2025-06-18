@@ -222,4 +222,73 @@ loop_y_test:
 	add rsp, 40
 	ret
 R_FillRectangle endp
+
+; rcx = RState
+; edx = X
+; r8d = YStart
+; r9d = YEnd
+; Colour
+R_VerticalLine proc
+	cmp edx, 0
+	jl done
+	cmp edx, dword ptr [rcx + 8]
+	jge done
+	
+	cmp r8d, r9d
+	jle @0
+	xchg r8d, r9d
+
+@0:
+; begin jumps
+;	mov eax, dword ptr [rcx + 12]
+;	cmp r8d, 0
+;	jge y_start_ge
+;	xor r8d, r8d
+;y_start_ge:
+;	cmp r8d, eax
+;	cmovg r8d, eax
+;	cmp r9d, 0
+;	jge y_end_ge
+;	xor r9d, r9d
+;y_end_ge:
+;	cmp r9d, eax
+;	cmovg r9d, eax
+; end jumps
+
+; begin conditional moves
+	xor rax, rax
+	cmp r8d, 0
+	cmovl r8d, eax
+	cmp r9d, 0
+	cmovl r9d, eax
+	mov eax, dword ptr [rcx + 12]
+	cmp r8d, eax
+	cmovg r8d, eax
+	cmp r9d, eax
+	cmovg r9d, eax
+; end conditional moves
+
+	mov r10d, edx
+	mov eax, dword ptr [rcx + 8]
+	mul r8d
+	add eax, r10d
+	shl rax, 2
+	add rax, qword ptr [rcx]
+	mov rdx, rax
+	mov r10d, dword ptr [rsp + 40]
+	mov eax, dword ptr [rcx + 8]
+	shl rax, 2
+
+	jmp draw_loop_test
+draw_loop:
+	inc r8d
+	mov dword ptr [rdx], r10d
+	add rdx, rax
+draw_loop_test:
+	cmp r8d, r9d
+	jl draw_loop
+
+done:
+	ret
+R_VerticalLine endp
 end

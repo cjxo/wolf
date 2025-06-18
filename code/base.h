@@ -15,6 +15,8 @@ typedef uint64_t u64;
 typedef    float f32;
 typedef   double f64;
 
+typedef s32 b32;
+
 #define assert_break() __debugbreak()
 #if defined(WOLF_DEBUG)
 # define w_assert(c) \

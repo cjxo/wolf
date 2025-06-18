@@ -166,3 +166,33 @@ R_FillRectangle(R_State *state, s32 X, s32 Y, s32 W, s32 H, u32 Colour)
     }
 }
 #endif
+
+#if 0
+static void
+R_VerticalLine(R_State *State, s32 X, s32 YStart, s32 YEnd, u32 Colour)
+{
+    if ((X >= 0) && (X < State->Width))
+    {
+        if (YStart > YEnd)
+        {
+            s32 Temp = YStart;
+            YStart = YEnd;
+            YEnd = YStart;
+        }
+        
+        if (YStart < 0) YStart = 0;
+        else if (YStart > State->Height) YStart = State->Height;
+        
+        if (YEnd < 0) YEnd = 0;
+        else if (YEnd > State->Height) YEnd = State->Height;
+        
+        u32 *OutPixels = (u32 *)(State->Pixels) + (YStart * State->Width + X);
+        while (YStart < YEnd)
+        {
+            *OutPixels = Colour;
+            OutPixels += State->Width;
+            ++YStart;
+        }
+    }
+}
+#endif

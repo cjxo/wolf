@@ -2,6 +2,9 @@
 #include <windows.h>
 #include <timeapi.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "./ext/stb_image.h"
+
 #include "base.h"
 #include "renderer.h"
 #include "my_math.h"
@@ -157,8 +160,7 @@ W32_Init(W32_State *state)
     ShowWindow(WindowHandle, SW_SHOW);
 }
 
-void __stdcall
-EntryPoint(void)
+void main(void)
 {
     SetProcessDPIAware();
     timeBeginPeriod(1);
@@ -205,6 +207,10 @@ EntryPoint(void)
     v2 PlayerP = V2(8, 8);
     f32 PlayerDegreesRot = 0;
     f32 RotRate = 40.0f*GameUpdateS;
+    
+    R_Texture2D Textures[2];
+    R_LoadTexture(Textures + 0, "..\\data\\textures\\eagle.png");
+    R_LoadTexture(Textures + 1, "..\\data\\textures\\redbrick.png");
     
     forever
     {
@@ -373,22 +379,33 @@ EntryPoint(void)
                 if (((RayXInt >= 0) && (RayXInt < 16)) && ((RayYInt >= 0) && (RayYInt < 16)) &&
                     (GameGrid[RayYInt * 16 + RayXInt] != 0))
                 {
-                    s32 CellValue = GameGrid[RayYInt * 16 + RayXInt];
-                    u32 Colour = 0;
-                    switch (CellValue)
+                    s32 CellValue = GameGrid[RayYInt * 16 + RayXInt] - 1;
+                    f32 WallX;
+                    if (XSideHit)
                     {
-                        case 1: Colour = 0xffff0000; break;
-                        case 2: Colour = 0xff00ff00; break;
-                        invalid_default_case();
+                        WallX = PlayerP.Y + DistanceToWall * RayDir.Y;
+                    }
+                    else
+                    {
+                        WallX = PlayerP.X + DistanceToWall * RayDir.X;
                     }
                     
-                    if (XSideHit) Colour &= 0x80808080;
+                    WallX -= (f32)((s32)WallX);
+                    w_assert((WallX>=0)&&(WallX<=1.0f));
+                    s32 TexX = (s32)(WallX * (f32)Textures[CellValue].Width);
+                    
+                    if (XSideHit && (RayDir.X > 0)) TexX = Textures[CellValue].Width - TexX - 1;
+                    if (!XSideHit && (RayDir.Y < 0)) TexX = Textures[CellValue].Width - TexX - 1;
+                    
+                    //u32 Colour = 0xffff0000;
+                    //if (XSideHit) Colour &= 0x80808080;
                     
                     s32 WallHeight = (s32)((f32)RState.Height / DistanceToWall);
                     s32 DrawStartY = (RState.Height - WallHeight) / 2;
                     s32 DrawEndY = DrawStartY + WallHeight;
                     
-                    R_VerticalLine(&RState, ScreenX, DrawStartY, DrawEndY, Colour);
+                    //R_VerticalLine(&RState, ScreenX, DrawStartY, DrawEndY, Colour);
+                    R_VerticalLineFromTexture2D(&RState, ScreenX, DrawStartY, DrawEndY, Textures[CellValue], TexX);
                     break;
                 }
             }

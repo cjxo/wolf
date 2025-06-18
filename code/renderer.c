@@ -196,3 +196,54 @@ R_VerticalLine(R_State *State, s32 X, s32 YStart, s32 YEnd, u32 Colour)
     }
 }
 #endif
+
+static void
+R_LoadTexture(R_Texture2D *OutputTexture, char *Filename)
+{
+    s32 NumComps;
+    OutputTexture->Pixels = stbi_load(Filename, &(OutputTexture->Width), &(OutputTexture->Height), &NumComps, 4);
+    w_assert(OutputTexture->Pixels!=0);
+}
+
+static void
+R_VerticalLineFromTexture2D(R_State *State, s32 X, s32 YStart, s32 YEnd, R_Texture2D Texture, s32 TextureX)
+{
+    if ((X >= 0) && (X < State->Width))
+    {
+        if (YStart > YEnd)
+        {
+            s32 Temp = YStart;
+            YStart = YEnd;
+            YEnd = YStart;
+        }
+        
+        f32 OldYStart = (f32)YStart;
+        f32 Height = ((f32)YEnd - (f32)(YStart));
+        
+        if (YStart < 0) YStart = 0;
+        else if (YStart > State->Height) YStart = State->Height;
+        
+        if (YEnd < 0) YEnd = 0;
+        else if (YEnd > State->Height) YEnd = State->Height;
+        
+        if (TextureX < 0) TextureX = 0;
+        else if (TextureX > Texture.Width) TextureX = Texture.Width - 1;
+        
+        u32 *OutPixels = (u32 *)(State->Pixels) + (YStart * State->Width + X);
+        f32 Step = 1.0f / Height;
+        f32 V = ((f32)YStart - OldYStart) / Height;
+        while (YStart < YEnd)
+        {
+            u32 Colour = *(((u32 *)Texture.Pixels) + (((s32)(V*Texture.Height)*Texture.Width) + TextureX));
+            
+            u8 R = Colour & 0xFF;
+            u8 G = (Colour>>8) & 0xFF;
+            u8 B = (Colour>>16) & 0xFF;
+            u8 A = (Colour>>24) & 0xFF;
+            *OutPixels = (A<<24)|(R<<16)|(G<<8)|(B<<0);
+            OutPixels += State->Width;
+            ++YStart;
+            V += Step;
+        }
+    }
+}

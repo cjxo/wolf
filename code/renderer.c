@@ -1,9 +1,9 @@
 static void
 R_Init(R_State *state)
 {
-    state->Width = 1280;
-    state->Height = 720;
-    u64 Size = 1280*720*4;
+    state->Width = 640;
+    state->Height = 360;
+    u64 Size = state->Width*state->Height*4;
     state->Pixels = VirtualAlloc(0, Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 }
 
@@ -221,18 +221,18 @@ R_VerticalLineFromTexture2D(R_State *State, s32 X, s32 YStart, s32 YEnd, R_Textu
         f32 Height = ((f32)YEnd - (f32)(YStart));
         
         if (YStart < 0) YStart = 0;
-        else if (YStart > State->Height) YStart = State->Height;
+        else if (YStart >= State->Height) YStart = State->Height-1;
         
         if (YEnd < 0) YEnd = 0;
-        else if (YEnd > State->Height) YEnd = State->Height;
+        else if (YEnd >= State->Height) YEnd = State->Height-1;
         
         if (TextureX < 0) TextureX = 0;
-        else if (TextureX > Texture.Width) TextureX = Texture.Width - 1;
+        else if (TextureX >= Texture.Width) TextureX = Texture.Width - 1;
         
         u32 *OutPixels = (u32 *)(State->Pixels) + (YStart * State->Width + X);
         f32 Step = 1.0f / Height;
         f32 V = ((f32)YStart - OldYStart) / Height;
-        while (YStart < YEnd)
+        while (YStart <= YEnd)
         {
             u32 Colour = *(((u32 *)Texture.Pixels) + (((s32)(V*Texture.Height)*Texture.Width) + TextureX));
             

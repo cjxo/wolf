@@ -262,6 +262,7 @@ R_VerticalLine proc
 	cmp r9d, 0
 	cmovl r9d, eax
 	mov eax, dword ptr [rcx + 12]
+	dec eax
 	cmp r8d, eax
 	cmovg r8d, eax
 	cmp r9d, eax
@@ -286,7 +287,7 @@ draw_loop:
 	add rdx, rax
 draw_loop_test:
 	cmp r8d, r9d
-	jl draw_loop
+	jle draw_loop
 
 done:
 	ret

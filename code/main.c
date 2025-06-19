@@ -38,6 +38,7 @@ typedef struct
     HWND WindowHandle;
     s32 WindowWidth;
     s32 WindowHeight;
+    f32 AspectRatio;
     INP_Flags KeyFlags[INP_Key_Count];
 } W32_State;
 
@@ -45,6 +46,18 @@ static LRESULT __stdcall
 W32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {
     LRESULT Result = 0;
+    
+    if (Message == WM_NCCREATE)
+    {
+        SetWindowLongPtrA(Window, GWLP_USERDATA, (LONG_PTR)(((CREATESTRUCT *)LParam)->lpCreateParams));
+        return DefWindowProc(Window, Message, WParam, LParam);
+    }
+    
+    W32_State *W32State = (W32_State *)GetWindowLongPtrA(Window, GWLP_USERDATA);
+    if (!W32State)
+    {
+        return DefWindowProc(Window, Message, WParam, LParam);
+    }
     
     switch (Message)
     {
@@ -56,6 +69,13 @@ W32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
         case WM_DESTROY:
         {
             ExitProcess(0);
+        } break;
+        
+        case WM_SIZE:
+        {
+            W32State->WindowWidth = LOWORD(LParam);
+            W32State->WindowHeight = HIWORD(LParam);
+            W32State->AspectRatio = (f32)W32State->WindowWidth/(f32)W32State->WindowHeight;
         } break;
         
         default:
@@ -146,7 +166,7 @@ W32_Init(W32_State *state)
     
     s32 WindowWidth = ClientRect.right - ClientRect.left;
     s32 WindowHeight = ClientRect.bottom - ClientRect.top;
-    HWND WindowHandle = CreateWindowExA(0, WindowClass.lpszClassName, "Wolfenstein", WS_OVERLAPPEDWINDOW, 0, 0, WindowWidth, WindowHeight, 0, 0, WindowClass.hInstance, 0);
+    HWND WindowHandle = CreateWindowExA(0, WindowClass.lpszClassName, "Wolfenstein", WS_OVERLAPPEDWINDOW, 0, 0, WindowWidth, WindowHeight, 0, 0, WindowClass.hInstance, state);
     
     if (!IsWindow(WindowHandle))
     {
@@ -208,9 +228,15 @@ void main(void)
     f32 PlayerDegreesRot = 0;
     f32 RotRate = 40.0f*GameUpdateS;
     
+    R_Texture2D GreyStone;
+    R_LoadTexture(&GreyStone, "..\\data\\textures\\greystone.png");
+    
     R_Texture2D Textures[2];
     R_LoadTexture(Textures + 0, "..\\data\\textures\\eagle.png");
     R_LoadTexture(Textures + 1, "..\\data\\textures\\redbrick.png");
+    
+    f32 Fov = 66.0f * (3.14159f/180.0f);
+    f32 Right = tanf(Fov*0.5f);
     
     forever
     {
@@ -274,7 +300,7 @@ void main(void)
         f32 RequestMoveY = 0;
         
         v2 PlayerDir = V2(Math_Cos((u32)PlayerDegreesRot),Math_Sin((u32)PlayerDegreesRot));
-        v2 PlayerCameraDir = V2(-PlayerDir.Y*0.66f, PlayerDir.X*0.66f);
+        v2 PlayerCameraDir = V2(-PlayerDir.Y*Right, PlayerDir.X*Right);
         
         if (W32State.KeyFlags[INP_Key_Up] & INP_Flag_KeyHeld)
         {
@@ -321,9 +347,41 @@ void main(void)
             }
         }
         
+        v2 RayDir0 = V2(PlayerDir.X - PlayerCameraDir.X, PlayerDir.Y - PlayerCameraDir.Y);
+        v2 RayDir1 = V2(PlayerDir.X + PlayerCameraDir.X, PlayerDir.Y + PlayerCameraDir.Y);
+        f32 PosZ = RState.Height*0.5f;
+        for (s32 ScreenY = RState.Height/2; ScreenY < RState.Height; ++ScreenY)
+        {
+            s32 YPFromCenter = ScreenY - RState.Height/2;
+            f32 RowDistance = PosZ/(f32)YPFromCenter;
+            f32 FloorStepX = RowDistance*(RayDir1.X - RayDir0.X)/(f32)RState.Width;
+            f32 FloorStepY = RowDistance*(RayDir1.Y - RayDir0.Y)/(f32)RState.Width;
+            f32 FloorX = PlayerP.X + RowDistance*RayDir0.X;
+            f32 FloorY = PlayerP.Y + RowDistance*RayDir0.Y;
+            for (s32 ScreenX = 0; ScreenX < RState.Width; ++ScreenX)
+            {
+                s32 CellX = (s32)FloorX;
+                s32 CellY = (s32)FloorY;
+                
+                s32 TexelX = (s32)(GreyStone.Width*(FloorX-(f32)CellX)) % GreyStone.Width;
+                s32 TexelY = (s32)(GreyStone.Height*(FloorY-(f32)CellY)) % GreyStone.Height;
+                
+                FloorX += FloorStepX;
+                FloorY += FloorStepY;
+                
+                u32 Colour = ((u32*)(GreyStone.Pixels))[TexelY*GreyStone.Width+TexelX];
+                u8 R = Colour & 0xFF;
+                u8 G = (Colour>>8) & 0xFF;
+                u8 B = (Colour>>16) & 0xFF;
+                u8 A = (Colour>>24) & 0xFF;
+                Colour = (A<<24)|(R<<16)|(G<<8)|(B<<0);
+                ((u32 *)(RState.Pixels))[ScreenY*RState.Width+ScreenX] = Colour;
+            }
+        }
+        
         for (s32 ScreenX = 0; ScreenX < RState.Width; ++ScreenX)
         {
-            f32 CameraX = (2.0f*((f32)ScreenX / (f32)RState.Width)) - 1.0f;
+            f32 CameraX = ((2.0f*((f32)ScreenX / (f32)RState.Width)) - 1.0f)*(Right*W32State.AspectRatio);
             v2 RayDir = V2(PlayerDir.X + PlayerCameraDir.X * CameraX, 
                            PlayerDir.Y + PlayerCameraDir.Y * CameraX);
             
@@ -404,16 +462,17 @@ void main(void)
                     s32 DrawStartY = (RState.Height - WallHeight) / 2;
                     s32 DrawEndY = DrawStartY + WallHeight;
                     
-                    //R_VerticalLine(&RState, ScreenX, DrawStartY, DrawEndY, Colour);
+                    R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0xff161616);
                     R_VerticalLineFromTexture2D(&RState, ScreenX, DrawStartY, DrawEndY, Textures[CellValue], TexX);
                     break;
                 }
             }
         }
         
-        u32 CellDim = 16;
-        u32 Gap = 4;
-        u32 InnerRectDim = 8;
+        
+        u32 CellDim = 8;
+        u32 Gap = 2;
+        u32 InnerRectDim = 4;
         for (u32 YCell = 0; YCell < 16; ++YCell)
         {
             for (u32 XCell = 0; XCell < 16; ++XCell)
@@ -459,7 +518,7 @@ void main(void)
                       0, 0, RState.Width, RState.Height,
                       RState.Pixels, &BitmapInfo, DIB_RGB_COLORS, SRCCOPY);
         
-        ZeroMemory(RState.Pixels, 1280*720*4);
+        //ZeroMemory(RState.Pixels, RState.Width*RState.Height*4);
         
         LARGE_INTEGER EndPerformanceCounter;
         QueryPerformanceCounter(&EndPerformanceCounter);

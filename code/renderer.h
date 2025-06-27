@@ -7,6 +7,8 @@ typedef struct
 {
     u8 *Pixels;
     s32 Width, Height;
+    
+    f32 *DepthBuffer1D;
 } R_State;
 
 // Always 4 bpp

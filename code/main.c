@@ -1,3 +1,9 @@
+// NOTE(cj): TODOs
+// - [ ] Multiple Sprites
+//    - [ ] Sorting Sprites with respect to cam
+// - [ ] Random Dungeon Generation
+//    - We will add roguelike elements here!
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <timeapi.h>
@@ -231,6 +237,9 @@ void main(void)
     R_Texture2D GreyStone;
     R_LoadTexture(&GreyStone, "..\\data\\textures\\greystone.png");
     
+    R_Texture2D Sprites[1];
+    R_LoadTexture(Sprites + 0, "..\\data\\textures\\barrel.png");
+    
     R_Texture2D Textures[2];
     R_LoadTexture(Textures + 0, "..\\data\\textures\\eagle.png");
     R_LoadTexture(Textures + 1, "..\\data\\textures\\redbrick.png");
@@ -299,6 +308,8 @@ void main(void)
         f32 RequestMoveX = 0;
         f32 RequestMoveY = 0;
         
+        // NOTE(cj): These vectors are in world coordinate system
+        // These two vectors can be made into a matrix that transforms the camera to world space.
         v2 PlayerDir = V2(Math_Cos((u32)PlayerDegreesRot),Math_Sin((u32)PlayerDegreesRot));
         v2 PlayerCameraDir = V2(-PlayerDir.Y*Right, PlayerDir.X*Right);
         
@@ -374,6 +385,7 @@ void main(void)
                 u8 G = (Colour>>8) & 0xFF;
                 u8 B = (Colour>>16) & 0xFF;
                 u8 A = (Colour>>24) & 0xFF;
+                
                 Colour = (A<<24)|(R<<16)|(G<<8)|(B<<0);
                 ((u32 *)(RState.Pixels))[ScreenY*RState.Width+ScreenX] = Colour;
             }
@@ -464,11 +476,79 @@ void main(void)
                     
                     R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0xff161616);
                     R_VerticalLineFromTexture2D(&RState, ScreenX, DrawStartY, DrawEndY, Textures[CellValue], TexX);
+                    RState.DepthBuffer1D[ScreenX] = DistanceToWall;
                     break;
                 }
             }
         }
         
+        {
+			R_Texture2D SpriteTex = Sprites[0];
+            
+            v2 SpriteWorldP = V2(3, 3);
+            v2 SpriteCamP = V2(SpriteWorldP.X - PlayerP.X, SpriteWorldP.X - PlayerP.Y);
+            f32 InvDet = 1.0f/(PlayerCameraDir.X*PlayerDir.Y-PlayerDir.X*PlayerCameraDir.Y);
+            {
+                // World To Camera
+                f32 X = InvDet*(PlayerDir.Y*SpriteCamP.X - PlayerDir.X*SpriteCamP.Y);
+                f32 Y = InvDet*(-PlayerCameraDir.Y*SpriteCamP.X + PlayerCameraDir.X*SpriteCamP.Y);
+                SpriteCamP.X = X;
+                SpriteCamP.Y = Y;
+            }
+            
+            // Perspective Projection
+            SpriteCamP.X /= SpriteCamP.Y;
+            
+            // NDC -> Screen Space
+            s32 ScreenSpaceX = (s32)(((SpriteCamP.X+1)*0.5f)*RState.Width);
+            s32 SpriteHeight = (s32)(Math_Abs((f32)RState.Height/SpriteCamP.Y));
+            s32 SpriteWidth = SpriteHeight;
+            s32 DrawStartY = (RState.Height - SpriteHeight) / 2;
+			if (DrawStartY < 0)
+			{
+				DrawStartY = 0;
+			}
+            s32 DrawEndY = DrawStartY + SpriteHeight;
+			if (DrawEndY >= RState.Height)
+			{
+				DrawEndY = RState.Height - 1;
+			}
+            s32 DrawStartX = ScreenSpaceX - SpriteWidth/2;
+			if (DrawStartX < 0)
+			{
+				DrawStartX = 0;
+			}
+            s32 DrawEndX = ScreenSpaceX + SpriteWidth/2;
+			if (DrawEndX >= RState.Width)
+			{
+				DrawEndX = RState.Width - 1;
+			}
+            
+			for (s32 StripeX = DrawStartX; StripeX < DrawEndX; ++StripeX)
+			{
+				int TexelX = (s32)(256 * (StripeX - (-SpriteWidth/2 + ScreenSpaceX)) * SpriteTex.Width / SpriteWidth) / 256;
+				if ((SpriteCamP.Y < RState.DepthBuffer1D[StripeX]) && (SpriteCamP.Y > 0) && (StripeX > 0) && (StripeX < RState.Width))
+				{
+                    for (s32 StripeY = DrawStartY; StripeY < DrawEndY; ++StripeY)
+                    {
+                        s32 D = StripeY*256 - RState.Height*128 + SpriteHeight*128;
+                        s32 TexelY = (D*SpriteTex.Height/SpriteHeight)/256;
+                        
+                        u32 Colour = ((u32*)(SpriteTex.Pixels))[TexelY*SpriteTex.Width+TexelX];
+                        u8 R = Colour & 0xFF;
+                        u8 G = (Colour>>8) & 0xFF;
+                        u8 B = (Colour>>16) & 0xFF;
+                        u8 A = (Colour>>24) & 0xFF;
+                        
+                        if (R&&G&&B)
+                        {
+                            Colour = (A<<24)|(R<<16)|(G<<8)|(B<<0);
+                            ((u32 *)(RState.Pixels))[StripeY*RState.Width+StripeX] = Colour;
+                        }
+                    }
+				}
+			}
+        }
         
         u32 CellDim = 8;
         u32 Gap = 2;

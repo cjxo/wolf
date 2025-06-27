@@ -5,6 +5,7 @@ R_Init(R_State *state)
     state->Height = 360;
     u64 Size = state->Width*state->Height*4;
     state->Pixels = VirtualAlloc(0, Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
+    state->DepthBuffer1D = VirtualAlloc(0, Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 }
 
 #if 0

@@ -3,7 +3,7 @@
 //    - [X] Sorting Sprites with respect to cam
 // - [X] Random Dungeon Generation
 //    - We will add roguelike elements here!
-//    - [ ] Scrolling Map.
+//    - [ ] Scrolling Mini-Map.
 //    - [ ] BSP + Cellular
 // - [ ] Migrate to DCSS Tiles / Old TileSets
 
@@ -800,18 +800,44 @@ void main(void)
 			}
         }
         
-        // TODO(cj): Scrollable Minimap. For now, comment
-#if 1
+        s32 CamDims = 16;
+        s32 MinimapCamOffsetX = (s32)PlayerP.X;
+        if (MinimapCamOffsetX < CamDims/2)
+        {
+            MinimapCamOffsetX = CamDims/2;
+        }
+        else if ((MinimapCamOffsetX + CamDims/2) > G_MaxMapDims)
+        {
+            MinimapCamOffsetX = G_MaxMapDims - CamDims/2;
+        }
+        
+        s32 MinimapCamOffsetY = (s32)PlayerP.Y;
+        if (MinimapCamOffsetY < CamDims/2)
+        {
+            MinimapCamOffsetY = CamDims/2;
+        }
+        else if ((MinimapCamOffsetY + CamDims/2) > G_MaxMapDims)
+        {
+            MinimapCamOffsetY = G_MaxMapDims - CamDims/2;
+        }
         u32 CellDim = 8;
         u32 Gap = 2;
         u32 InnerRectDim = 4;
-        for (u32 YCell = 0; YCell < G_MaxMapDims; ++YCell)
+        
+        // world space...
+        s32 StartIterY = MinimapCamOffsetY - CamDims/2;
+        s32 EndIterY = CamDims + StartIterY;
+        s32 StartIterX = MinimapCamOffsetX - CamDims/2;
+        s32 EndIterX = CamDims + StartIterX;
+        
+        for (s32 YCell = StartIterY; YCell < EndIterY; ++YCell)
         {
-            for (u32 XCell = 0; XCell < G_MaxMapDims; ++XCell)
+            for (s32 XCell = StartIterX; XCell < EndIterX; ++XCell)
             {
                 s32 CellValue = GameGrid[YCell * G_MaxMapDims + XCell].ID;
-                s32 X = XCell*CellDim + XCell*Gap;
-                s32 Y = YCell*CellDim + YCell*Gap;
+                // camera (minimap) space...
+                s32 X = (XCell - MinimapCamOffsetX + CamDims/2)*(CellDim + Gap);
+                s32 Y = (YCell - MinimapCamOffsetY + CamDims/2)*(CellDim + Gap);
                 
                 R_WireRectangle(&RState, X, Y, CellDim, CellDim, 0xff0000ff);
                 switch (CellValue)
@@ -828,14 +854,11 @@ void main(void)
         }
         
         {
-            f32 XCell = PlayerP.X;
-            f32 YCell = PlayerP.Y;
-            s32 X = (s32)(XCell*CellDim + XCell*Gap);
-            s32 Y = (s32)(YCell*CellDim + YCell*Gap);
+            s32 X = (((s32)PlayerP.X - MinimapCamOffsetX + CamDims/2)*(CellDim + Gap));
+            s32 Y = (((s32)PlayerP.Y - MinimapCamOffsetY + CamDims/2)*(CellDim + Gap));
             
             R_FillRectangle(&RState, X + InnerRectDim/2 - (CellDim - InnerRectDim)/2, Y + InnerRectDim/2 - (CellDim - InnerRectDim)/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff00ff00);
         }
-#endif
         
         HDC Hdc = GetDC(W32State.WindowHandle);
         

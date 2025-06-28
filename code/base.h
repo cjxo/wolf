@@ -39,4 +39,11 @@ assert_break();\
 #define array_count(a) (sizeof(a)/sizeof((a)[0]))
 #define forever while (true)
 
+#define swap(a,b,T) \
+do{\
+T temp = a;\
+a = b;\
+b = temp;\
+}while(0)
+
 #endif //BASE_H

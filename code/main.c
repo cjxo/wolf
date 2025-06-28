@@ -186,6 +186,65 @@ W32_Init(W32_State *state)
     ShowWindow(WindowHandle, SW_SHOW);
 }
 
+typedef struct
+{
+    v2 P;
+    R_Texture2D Texture;
+} G_Sprite;
+
+static G_Sprite
+G_CreateSprite(v2 P, R_Texture2D Texture)
+{
+    G_Sprite Result;
+    Result.Texture = Texture;
+    Result.P = P;
+    return(Result);
+}
+
+static s64
+__G_SpriteOrderPartition(f32 *SpriteLengthSquareds, u64 *ResultSortOrder, s64 LowSide, s64 HighSide)
+{
+    f32 Pivot = SpriteLengthSquareds[HighSide];
+    s64 HighestLowSide = LowSide;
+    
+    for (s64 ArrayIndex = LowSide; ArrayIndex < HighSide; ++ArrayIndex)
+    {
+        if (SpriteLengthSquareds[ArrayIndex] >= Pivot)
+        {
+            swap(SpriteLengthSquareds[ArrayIndex], SpriteLengthSquareds[HighestLowSide], f32);
+            swap(ResultSortOrder[ArrayIndex], ResultSortOrder[HighestLowSide], u64);
+            HighestLowSide += 1;
+        }
+    }
+    
+    swap(SpriteLengthSquareds[HighSide], SpriteLengthSquareds[HighestLowSide], f32);
+    swap(ResultSortOrder[HighSide], ResultSortOrder[HighestLowSide], u64);
+    return(HighestLowSide);
+}
+
+static void
+__G_SpriteOrder(f32 *SpriteLengthSquareds, u64 *ResultSortOrder, s64 LowSide, s64 HighSide)
+{
+    if (LowSide < HighSide)
+    {
+        s64 PartitionIndex = __G_SpriteOrderPartition(SpriteLengthSquareds, ResultSortOrder, LowSide, HighSide);
+        __G_SpriteOrder(SpriteLengthSquareds, ResultSortOrder, LowSide, PartitionIndex - 1);
+        __G_SpriteOrder(SpriteLengthSquareds, ResultSortOrder, PartitionIndex + 1, HighSide);
+    }
+}
+
+static void
+G_SpriteOrder(f32 *SpriteLengthSquareds, u64 SpriteCount, u64 *ResultSortOrder)
+{
+    // NOTE: ResultSortOrder Length must be equal to SpriteCount.
+    for (u64 SpriteIdx = 0; SpriteIdx < SpriteCount; ++SpriteIdx)
+    {
+        ResultSortOrder[SpriteIdx] = SpriteIdx;
+    }
+    
+    __G_SpriteOrder(SpriteLengthSquareds, ResultSortOrder, 0, SpriteCount - 1);
+}
+
 void main(void)
 {
     SetProcessDPIAware();
@@ -237,12 +296,19 @@ void main(void)
     R_Texture2D GreyStone;
     R_LoadTexture(&GreyStone, "..\\data\\textures\\greystone.png");
     
-    R_Texture2D Sprites[1];
-    R_LoadTexture(Sprites + 0, "..\\data\\textures\\barrel.png");
+    R_Texture2D SpriteTextures[2];
+    R_LoadTexture(SpriteTextures + 0, "..\\data\\textures\\barrel.png");
+    R_LoadTexture(SpriteTextures + 1, "..\\data\\textures\\pillar.png");
     
     R_Texture2D Textures[2];
     R_LoadTexture(Textures + 0, "..\\data\\textures\\eagle.png");
     R_LoadTexture(Textures + 1, "..\\data\\textures\\redbrick.png");
+    
+    G_Sprite StaticSprites[] =
+    {
+        G_CreateSprite(V2(6, 3), SpriteTextures[1]),
+        G_CreateSprite(V2(3, 3), SpriteTextures[0]),
+    };
     
     f32 Fov = 66.0f * (3.14159f/180.0f);
     f32 Right = tanf(Fov*0.5f);
@@ -482,19 +548,29 @@ void main(void)
             }
         }
         
+        f32 SpriteLengthSquareds[array_count(StaticSprites)];
+        for (u32 SpriteIdx = 0; SpriteIdx < array_count(StaticSprites); ++SpriteIdx)
         {
-			R_Texture2D SpriteTex = Sprites[0];
+            f32 X = StaticSprites[SpriteIdx].P.X - PlayerP.X;
+            f32 Y = StaticSprites[SpriteIdx].P.Y - PlayerP.Y;
+            SpriteLengthSquareds[SpriteIdx] = X*X + Y*Y;
+        }
+        u64 SpriteOrderRender[array_count(StaticSprites)];
+        G_SpriteOrder(SpriteLengthSquareds, array_count(StaticSprites), SpriteOrderRender);
+        
+        for (u32 SpriteIdx = 0; SpriteIdx < array_count(StaticSprites); ++SpriteIdx)
+        {
+            G_Sprite Sprite = StaticSprites[SpriteOrderRender[SpriteIdx]];
             
-            v2 SpriteWorldP = V2(3, 3);
+            v2 SpriteWorldP = Sprite.P;
             v2 SpriteCamP = V2(SpriteWorldP.X - PlayerP.X, SpriteWorldP.X - PlayerP.Y);
             f32 InvDet = 1.0f/(PlayerCameraDir.X*PlayerDir.Y-PlayerDir.X*PlayerCameraDir.Y);
-            {
-                // World To Camera
-                f32 X = InvDet*(PlayerDir.Y*SpriteCamP.X - PlayerDir.X*SpriteCamP.Y);
-                f32 Y = InvDet*(-PlayerCameraDir.Y*SpriteCamP.X + PlayerCameraDir.X*SpriteCamP.Y);
-                SpriteCamP.X = X;
-                SpriteCamP.Y = Y;
-            }
+            
+            // World To Camera
+            f32 X = InvDet*(PlayerDir.Y*SpriteCamP.X - PlayerDir.X*SpriteCamP.Y);
+            f32 Y = InvDet*(-PlayerCameraDir.Y*SpriteCamP.X + PlayerCameraDir.X*SpriteCamP.Y);
+            SpriteCamP.X = X;
+            SpriteCamP.Y = Y;
             
             // Perspective Projection
             SpriteCamP.X /= SpriteCamP.Y;
@@ -526,15 +602,15 @@ void main(void)
             
 			for (s32 StripeX = DrawStartX; StripeX < DrawEndX; ++StripeX)
 			{
-				int TexelX = (s32)(256 * (StripeX - (-SpriteWidth/2 + ScreenSpaceX)) * SpriteTex.Width / SpriteWidth) / 256;
+				int TexelX = (s32)(256 * (StripeX - (-SpriteWidth/2 + ScreenSpaceX)) * Sprite.Texture.Width / SpriteWidth) / 256;
 				if ((SpriteCamP.Y < RState.DepthBuffer1D[StripeX]) && (SpriteCamP.Y > 0) && (StripeX > 0) && (StripeX < RState.Width))
 				{
                     for (s32 StripeY = DrawStartY; StripeY < DrawEndY; ++StripeY)
                     {
                         s32 D = StripeY*256 - RState.Height*128 + SpriteHeight*128;
-                        s32 TexelY = (D*SpriteTex.Height/SpriteHeight)/256;
+                        s32 TexelY = (D*Sprite.Texture.Height/SpriteHeight)/256;
                         
-                        u32 Colour = ((u32*)(SpriteTex.Pixels))[TexelY*SpriteTex.Width+TexelX];
+                        u32 Colour = ((u32*)(Sprite.Texture.Pixels))[TexelY*Sprite.Texture.Width+TexelX];
                         u8 R = Colour & 0xFF;
                         u8 G = (Colour>>8) & 0xFF;
                         u8 B = (Colour>>16) & 0xFF;
@@ -597,8 +673,6 @@ void main(void)
         StretchDIBits(Hdc, 0, 0, W32State.WindowWidth, W32State.WindowHeight,
                       0, 0, RState.Width, RState.Height,
                       RState.Pixels, &BitmapInfo, DIB_RGB_COLORS, SRCCOPY);
-        
-        //ZeroMemory(RState.Pixels, RState.Width*RState.Height*4);
         
         LARGE_INTEGER EndPerformanceCounter;
         QueryPerformanceCounter(&EndPerformanceCounter);

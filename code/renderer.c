@@ -233,7 +233,7 @@ R_VerticalLineFromTexture2D(R_State *State, s32 X, s32 YStart, s32 YEnd, R_Textu
         u32 *OutPixels = (u32 *)(State->Pixels) + (YStart * State->Width + X);
         f32 Step = 1.0f / Height;
         f32 V = ((f32)YStart - OldYStart) / Height;
-        while (YStart <= YEnd)
+        while (YStart < YEnd)
         {
             u32 Colour = *(((u32 *)Texture.Pixels) + (((s32)(V*Texture.Height)*Texture.Width) + TextureX));
             

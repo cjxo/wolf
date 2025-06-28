@@ -1,6 +1,6 @@
 // NOTE(cj): TODOs
-// - [ ] Multiple Sprites
-//    - [ ] Sorting Sprites with respect to cam
+// - [X] Multiple Sprites
+//    - [X] Sorting Sprites with respect to cam
 // - [ ] Random Dungeon Generation
 //    - We will add roguelike elements here!
 
@@ -312,6 +312,8 @@ void main(void)
     
     f32 Fov = 66.0f * (3.14159f/180.0f);
     f32 Right = tanf(Fov*0.5f);
+    f32 MaxRaycastDepth = 16.0f;
+    s32 MinWallHeight = (s32)(Right*MaxRaycastDepth);
     
     forever
     {
@@ -430,30 +432,36 @@ void main(void)
         for (s32 ScreenY = RState.Height/2; ScreenY < RState.Height; ++ScreenY)
         {
             s32 YPFromCenter = ScreenY - RState.Height/2;
-            f32 RowDistance = PosZ/(f32)YPFromCenter;
-            f32 FloorStepX = RowDistance*(RayDir1.X - RayDir0.X)/(f32)RState.Width;
-            f32 FloorStepY = RowDistance*(RayDir1.Y - RayDir0.Y)/(f32)RState.Width;
-            f32 FloorX = PlayerP.X + RowDistance*RayDir0.X;
-            f32 FloorY = PlayerP.Y + RowDistance*RayDir0.Y;
-            for (s32 ScreenX = 0; ScreenX < RState.Width; ++ScreenX)
+            if (YPFromCenter >= MinWallHeight)
             {
-                s32 CellX = (s32)FloorX;
-                s32 CellY = (s32)FloorY;
-                
-                s32 TexelX = (s32)(GreyStone.Width*(FloorX-(f32)CellX)) % GreyStone.Width;
-                s32 TexelY = (s32)(GreyStone.Height*(FloorY-(f32)CellY)) % GreyStone.Height;
-                
-                FloorX += FloorStepX;
-                FloorY += FloorStepY;
-                
-                u32 Colour = ((u32*)(GreyStone.Pixels))[TexelY*GreyStone.Width+TexelX];
-                u8 R = Colour & 0xFF;
-                u8 G = (Colour>>8) & 0xFF;
-                u8 B = (Colour>>16) & 0xFF;
-                u8 A = (Colour>>24) & 0xFF;
-                
-                Colour = (A<<24)|(R<<16)|(G<<8)|(B<<0);
-                ((u32 *)(RState.Pixels))[ScreenY*RState.Width+ScreenX] = Colour;
+                f32 RowDistance = PosZ/(f32)YPFromCenter;
+                f32 FloorStepX = RowDistance*(RayDir1.X - RayDir0.X)/(f32)RState.Width;
+                f32 FloorStepY = RowDistance*(RayDir1.Y - RayDir0.Y)/(f32)RState.Width;
+                f32 FloorX = PlayerP.X + RowDistance*RayDir0.X;
+                f32 FloorY = PlayerP.Y + RowDistance*RayDir0.Y;
+                for (s32 ScreenX = 0; ScreenX < RState.Width; ++ScreenX)
+                {
+                    s32 CellX = (s32)FloorX;
+                    s32 CellY = (s32)FloorY;
+                    
+                    s32 TexelX = (s32)(GreyStone.Width*(FloorX-(f32)CellX)) % GreyStone.Width;
+                    s32 TexelY = (s32)(GreyStone.Height*(FloorY-(f32)CellY)) % GreyStone.Height;
+                    
+                    FloorX += FloorStepX;
+                    FloorY += FloorStepY;
+                    
+                    if ((TexelX >= 0) && (TexelY >= 0))
+                    {
+                        u32 Colour = ((u32*)(GreyStone.Pixels))[TexelY*GreyStone.Width+TexelX];
+                        u8 R = Colour & 0xFF;
+                        u8 G = (Colour>>8) & 0xFF;
+                        u8 B = (Colour>>16) & 0xFF;
+                        u8 A = (Colour>>24) & 0xFF;
+                        
+                        Colour = (A<<24)|(R<<16)|(G<<8)|(B<<0);
+                        ((u32 *)(RState.Pixels))[ScreenY*RState.Width+ScreenX] = Colour;
+                    }
+                }
             }
         }
         
@@ -494,7 +502,6 @@ void main(void)
             }
             
             f32 DistanceToWall = 0;
-            f32 MaxRaycastDepth = 16.0f;
             while (DistanceToWall < MaxRaycastDepth)
             {
                 if (OffsetWithinCell.X < OffsetWithinCell.Y)
@@ -540,7 +547,8 @@ void main(void)
                     s32 DrawStartY = (RState.Height - WallHeight) / 2;
                     s32 DrawEndY = DrawStartY + WallHeight;
                     
-                    R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0xff161616);
+                    //R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0xff161616);
+                    R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0);
                     R_VerticalLineFromTexture2D(&RState, ScreenX, DrawStartY, DrawEndY, Textures[CellValue], TexX);
                     RState.DepthBuffer1D[ScreenX] = DistanceToWall;
                     break;
@@ -580,7 +588,7 @@ void main(void)
             s32 SpriteHeight = (s32)(Math_Abs((f32)RState.Height/SpriteCamP.Y));
             s32 SpriteWidth = SpriteHeight;
             s32 DrawStartY = (RState.Height - SpriteHeight) / 2;
-			if (DrawStartY < 0)
+            if (DrawStartY < 0)
 			{
 				DrawStartY = 0;
 			}
@@ -673,6 +681,9 @@ void main(void)
         StretchDIBits(Hdc, 0, 0, W32State.WindowWidth, W32State.WindowHeight,
                       0, 0, RState.Width, RState.Height,
                       RState.Pixels, &BitmapInfo, DIB_RGB_COLORS, SRCCOPY);
+        
+        ZeroMemory(RState.Pixels, RState.Width*RState.Height*4);
+        //ZeroMemory(RState.DepthBuffer1D, RState.Width*RState.Height*4);
         
         LARGE_INTEGER EndPerformanceCounter;
         QueryPerformanceCounter(&EndPerformanceCounter);

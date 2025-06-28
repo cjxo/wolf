@@ -1,8 +1,11 @@
 // NOTE(cj): TODOs
 // - [X] Multiple Sprites
 //    - [X] Sorting Sprites with respect to cam
-// - [ ] Random Dungeon Generation
+// - [X] Random Dungeon Generation
 //    - We will add roguelike elements here!
+//    - [ ] Scrolling Map.
+//    - [ ] BSP + Cellular
+// - [ ] Migrate to DCSS Tiles / Old TileSets
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -15,6 +18,7 @@
 #include "renderer.h"
 #include "my_math.h"
 
+#include "base.c"
 #include "my_math.c"
 #include "renderer.c"
 
@@ -245,6 +249,161 @@ G_SpriteOrder(f32 *SpriteLengthSquareds, u64 SpriteCount, u64 *ResultSortOrder)
     __G_SpriteOrder(SpriteLengthSquareds, ResultSortOrder, 0, SpriteCount - 1);
 }
 
+typedef struct
+{
+    s32 ID;
+} G_Tile;
+
+static void
+__G_GEN_BSP(PRNG *Gen, G_Tile *Tiles, s32 TileMapWidth, s32 TileMapHeight, s32 StartGenX, s32 StartGenY, s32 EndGenX, s32 EndGenY, s32 MinRoomW, s32 MinRoomH)
+{
+    s32 RoomWidthS32 = EndGenX-StartGenX;
+    s32 RoomHeightS32 = EndGenY-StartGenY;
+    if ((RoomHeightS32 <= MinRoomH) || (RoomWidthS32 <= MinRoomW))
+    {
+        s32 DesiredPosX = StartGenX;
+        s32 DesiredPosY = StartGenY;
+        
+        if (DesiredPosX == 0)
+        {
+            DesiredPosX = 1;
+        }
+        
+        if (DesiredPosY == 0)
+        {
+            DesiredPosY = 1;
+        }
+        
+        //s32 DesiredEndPosX = DesiredPosX + PRNG_RangeU32(Gen, ((EndGenX - StartGenX) * 3) / 4, EndGenX - StartGenX);
+        s32 DesiredEndPosX = EndGenX;
+        //s32 DesiredEndPosY = DesiredPosY + PRNG_RangeU32(Gen, ((EndGenY - StartGenY) * 3) / 4, EndGenY - StartGenY);
+        s32 DesiredEndPosY = EndGenY;
+        
+        if (DesiredEndPosX == TileMapWidth)
+        {
+            DesiredEndPosX -= 1;
+        }
+        
+        if (DesiredEndPosY == TileMapHeight)
+        {
+            DesiredEndPosY -= 1;
+        }
+        
+        while (DesiredPosY < DesiredEndPosY)
+        {
+            for (s32 CurrX = DesiredPosX; CurrX < DesiredEndPosX; ++CurrX)
+            {
+                Tiles[DesiredPosY * TileMapWidth + CurrX].ID = 0;
+            }
+            ++DesiredPosY;
+        }
+    }
+    else
+    {
+        u32 AntiInfLoop = 0;
+        static f32 MaxDimsRatio = 2.3f;
+        forever
+        {
+            b32 SplitHorizontal = PRNG_NormF32(Gen) < 0.5f;
+            if (SplitHorizontal)
+            {
+                // ------------------
+                // -                -
+                // -                -
+                // -                -
+                // ------------------    <-------- DesiredPosY
+                // -                -
+                // -                -
+                // -                -
+                // ------------------
+                u32 DesiredPosY = PRNG_RangeU32(Gen, StartGenY, EndGenY);
+                
+                f32 RoomWidth = (f32)RoomWidthS32;
+                f32 TopRoomHeight = (f32)(DesiredPosY - StartGenY);
+                f32 BottomRoomHeight = (f32)(EndGenY - DesiredPosY);
+                
+                f32 TopRoomRatio = RoomWidth / TopRoomHeight;
+                f32 BottomRoomRatio = RoomWidth / BottomRoomHeight;
+                
+                if (!((TopRoomRatio > MaxDimsRatio) || (BottomRoomRatio > MaxDimsRatio)))
+                {
+                    __G_GEN_BSP(Gen, Tiles, TileMapWidth, TileMapHeight, StartGenX, StartGenY, EndGenX, DesiredPosY, MinRoomW, MinRoomH);
+                    __G_GEN_BSP(Gen, Tiles, TileMapWidth, TileMapHeight, StartGenX, DesiredPosY + 1, EndGenX, EndGenY, MinRoomW, MinRoomH);
+                    
+                    s32 StartHoleX = RoomWidthS32/2 + StartGenX;
+                    s32 StartHoleY = DesiredPosY - (DesiredPosY - StartGenY)/2;
+                    s32 EndHoleY = (EndGenY - DesiredPosY)/2 + DesiredPosY;
+                    
+                    for (; StartHoleY < EndHoleY; ++StartHoleY)
+                    {
+                        Tiles[StartHoleY * TileMapWidth + StartHoleX].ID = 0;
+                    }
+                    break;
+                }
+            }
+            else
+            {
+                // ------------------
+                // -       -        -
+                // -       -        -
+                // -       -        -
+                // -       -        -
+                // -       -        -
+                // -       -        -
+                // -       -        -
+                // ------------------
+                //         ^
+                //         |
+                //         |
+                //    DesiredPosX
+                u32 DesiredPosX = PRNG_RangeU32(Gen, StartGenX, EndGenX);
+                
+                f32 RoomHeight = (f32)RoomHeightS32;
+                f32 LeftRoomWidth = (f32)(DesiredPosX - StartGenX);
+                f32 RightRoomWidth = (f32)(EndGenX - DesiredPosX);
+                
+                f32 LeftRoomRatio = RoomHeight / LeftRoomWidth;
+                f32 RightRoomRatio = RoomHeight / RightRoomWidth;
+                
+                if (!((LeftRoomRatio > MaxDimsRatio) || (RightRoomRatio > MaxDimsRatio)))
+                {
+                    __G_GEN_BSP(Gen, Tiles, TileMapWidth, TileMapHeight, StartGenX, StartGenY, DesiredPosX, EndGenY, MinRoomW, MinRoomH);
+                    __G_GEN_BSP(Gen, Tiles, TileMapWidth, TileMapHeight, DesiredPosX + 1, StartGenY, EndGenX, EndGenY, MinRoomW, MinRoomH);
+                    
+                    s32 StartHoleY = StartGenY + RoomHeightS32/2;
+                    s32 StartHoleX = DesiredPosX - (DesiredPosX - StartGenX)/2;
+                    s32 EndHoleX = (EndGenX - DesiredPosX)/2 + DesiredPosX;
+                    for (; StartHoleX < EndHoleX; ++StartHoleX)
+                    {
+                        Tiles[StartHoleY * TileMapWidth + StartHoleX].ID = 0;
+                    }
+                    break;
+                }
+            }
+            
+            if (++AntiInfLoop > 100)
+            {
+                break;
+            }
+        }
+    }
+}
+
+inline static void
+G_GEN_BSP(PRNG *Gen, G_Tile *Tiles, u32 Width, u32 Height, s32 MinRoomW, s32 MinRoomH)
+{
+    u32 Area = Width*Height;
+    for (u32 Index = 0;
+         Index < Area;
+         ++Index)
+    {
+        Tiles[Index].ID = 1;
+    }
+    
+    __G_GEN_BSP(Gen, Tiles, Width, Height, 0, 0, Width, Height, MinRoomW, MinRoomH);
+}
+
+#define G_MaxMapDims 32
 void main(void)
 {
     SetProcessDPIAware();
@@ -269,8 +428,9 @@ void main(void)
     LARGE_INTEGER BeginPerformanceCounter;
     QueryPerformanceCounter(&BeginPerformanceCounter);
     
-    s32 GameGrid[16*16] = 
-    {
+    G_Tile GameGrid[G_MaxMapDims*G_MaxMapDims];
+#if 0
+    =  {
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
@@ -288,6 +448,7 @@ void main(void)
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     };
+#endif
     
     v2 PlayerP = V2(8, 8);
     f32 PlayerDegreesRot = 0;
@@ -314,6 +475,10 @@ void main(void)
     f32 Right = tanf(Fov*0.5f);
     f32 MaxRaycastDepth = 16.0f;
     s32 MinWallHeight = (s32)(Right*MaxRaycastDepth);
+    
+    PRNG RandGen;
+    PRNG_Seed(&RandGen, 37);
+    G_GEN_BSP(&RandGen, GameGrid, G_MaxMapDims, G_MaxMapDims, 10, 10);
     
     forever
     {
@@ -416,9 +581,9 @@ void main(void)
             s32 NewXIDX = (s32)X;
             s32 NewYIDX = (s32)Y;
             
-            if ((NewXIDX < 16) && (NewYIDX < 16) && (NewXIDX >= 0) && (NewYIDX >= 0))
+            if ((NewXIDX < G_MaxMapDims) && (NewYIDX < G_MaxMapDims) && (NewXIDX >= 0) && (NewYIDX >= 0))
             {
-                if (GameGrid[NewYIDX*16+NewXIDX] == 0)
+                if (GameGrid[NewYIDX*G_MaxMapDims+NewXIDX].ID == 0)
                 {
                     PlayerP.X = X;
                     PlayerP.Y = Y;
@@ -426,6 +591,7 @@ void main(void)
             }
         }
         
+        // ------ THE ACTUAL MAIN RENDERER ------ //
         v2 RayDir0 = V2(PlayerDir.X - PlayerCameraDir.X, PlayerDir.Y - PlayerCameraDir.Y);
         v2 RayDir1 = V2(PlayerDir.X + PlayerCameraDir.X, PlayerDir.Y + PlayerCameraDir.Y);
         f32 PosZ = RState.Height*0.5f;
@@ -519,10 +685,10 @@ void main(void)
                     XSideHit = false;
                 }
                 
-                if (((RayXInt >= 0) && (RayXInt < 16)) && ((RayYInt >= 0) && (RayYInt < 16)) &&
-                    (GameGrid[RayYInt * 16 + RayXInt] != 0))
+                if (((RayXInt >= 0) && (RayXInt < G_MaxMapDims)) && ((RayYInt >= 0) && (RayYInt < G_MaxMapDims)) &&
+                    (GameGrid[RayYInt * G_MaxMapDims + RayXInt].ID != 0))
                 {
-                    s32 CellValue = GameGrid[RayYInt * 16 + RayXInt] - 1;
+                    s32 CellValue = GameGrid[RayYInt * G_MaxMapDims + RayXInt].ID - 1;
                     f32 WallX;
                     if (XSideHit)
                     {
@@ -634,14 +800,16 @@ void main(void)
 			}
         }
         
+        // TODO(cj): Scrollable Minimap. For now, comment
+#if 1
         u32 CellDim = 8;
         u32 Gap = 2;
         u32 InnerRectDim = 4;
-        for (u32 YCell = 0; YCell < 16; ++YCell)
+        for (u32 YCell = 0; YCell < G_MaxMapDims; ++YCell)
         {
-            for (u32 XCell = 0; XCell < 16; ++XCell)
+            for (u32 XCell = 0; XCell < G_MaxMapDims; ++XCell)
             {
-                s32 CellValue = GameGrid[YCell * 16 + XCell];
+                s32 CellValue = GameGrid[YCell * G_MaxMapDims + XCell].ID;
                 s32 X = XCell*CellDim + XCell*Gap;
                 s32 Y = YCell*CellDim + YCell*Gap;
                 
@@ -667,6 +835,7 @@ void main(void)
             
             R_FillRectangle(&RState, X + InnerRectDim/2 - (CellDim - InnerRectDim)/2, Y + InnerRectDim/2 - (CellDim - InnerRectDim)/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff00ff00);
         }
+#endif
         
         HDC Hdc = GetDC(W32State.WindowHandle);
         

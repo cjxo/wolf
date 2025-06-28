@@ -31,6 +31,15 @@ assert_break();\
 # define w_assert(c) (void)(c)
 #endif
 
+#define swap(a,b,T) \
+do{\
+T temp = a;\
+a = b;\
+b = temp;\
+}while(0)
+
+#define ror(r,c) _rotr((r),(c))
+
 #define true 1
 #define false 0
 #define null 0
@@ -39,11 +48,14 @@ assert_break();\
 #define array_count(a) (sizeof(a)/sizeof((a)[0]))
 #define forever while (true)
 
-#define swap(a,b,T) \
-do{\
-T temp = a;\
-a = b;\
-b = temp;\
-}while(0)
+typedef struct
+{
+    u64 State;
+} PRNG;
+
+inline static void PRNG_Seed(PRNG *State, u64 Seed);
+inline static u32  PRNG_U32(PRNG *State);
+static u32         PRNG_RangeU32(PRNG *State, u32 Low, u32 High);
+inline static f32  PRNG_NormF32(PRNG *State);
 
 #endif //BASE_H

@@ -3,14 +3,15 @@
 //    - [X] Sorting Sprites with respect to cam
 // - [X] Random Dungeon Generation
 //    - We will add roguelike elements here!
-//    - [ ] Basic BSP
-//    - [ ] Mini-Map improvements.
+//    - [X] Basic BSP
+//    - [X] Mini-Map improvements.
 //       - Perhaps, Mini-Map is only enabled only on dev mode?
 //       - [X] Scrolling
 //       - [X] Raycasting Visualizer.
-//    - [ ] "Smooth Choppy" movement.
-//    - [ ] BSP + Cellular
+//    - [X] "Smooth Choppy" movement.
 // - [ ] Migrate to DCSS Tiles / Old TileSets
+// - [ ] Generation improvements
+//    - [ ] BSP + Cellular
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -455,8 +456,10 @@ void main(void)
     };
 #endif
     
-    v2 PlayerP = V2(8, 8);
-    f32 PlayerDegreesRot = 0;
+    v2 PlayerP = V2(8.5f, 8.5f), NextPlayerP;
+    f32 PlayerMoveT = -1.0f;
+    
+    f32 PlayerDegreesRot = 0, NextPlayerDegreesRot, PlayerDegreesRotT = -1.0f;
     f32 RotRate = 40.0f*GameUpdateS;
     
     R_Texture2D GreyStone;
@@ -524,22 +527,38 @@ void main(void)
             }
         }
         
-        // apply rotation matrixs
-        if (W32State.KeyFlags[INP_Key_Left] & INP_Flag_KeyHeld)
+        if (PlayerDegreesRotT != -1.0f)
         {
-            PlayerDegreesRot -= RotRate;
-            if (PlayerDegreesRot < 0)
+            if (PlayerDegreesRotT >= 1.0f)
             {
-                PlayerDegreesRot = 360;
+                PlayerDegreesRotT = -1.0f;
+                PlayerDegreesRot = NextPlayerDegreesRot;
+            }
+            else
+            {
+                PlayerDegreesRotT += GameUpdateS;
+                f32 T = 1.0f - PlayerDegreesRotT;
+                PlayerDegreesRot = PlayerDegreesRot + (1.0f-T*T)*(NextPlayerDegreesRot - PlayerDegreesRot);
             }
         }
-        
-        if (W32State.KeyFlags[INP_Key_Right] & INP_Flag_KeyHeld)
+        else if (W32State.KeyFlags[INP_Key_Left] & INP_Flag_KeyPressed)
         {
-            PlayerDegreesRot += RotRate;
-            if (PlayerDegreesRot>360)
+            PlayerDegreesRotT = 0.0f;
+            NextPlayerDegreesRot = PlayerDegreesRot - 45;
+            if (NextPlayerDegreesRot < 0)
+            {
+                PlayerDegreesRot = 360;
+                NextPlayerDegreesRot = 315;
+            }
+        }
+        else if (W32State.KeyFlags[INP_Key_Right] & INP_Flag_KeyPressed)
+        {
+            PlayerDegreesRotT = 0.0f;
+            NextPlayerDegreesRot = PlayerDegreesRot + 45;
+            if (NextPlayerDegreesRot > 360)
             {
                 PlayerDegreesRot = 0;
+                NextPlayerDegreesRot = 45;
             }
         }
         
@@ -551,30 +570,82 @@ void main(void)
         v2 PlayerDir = V2(Math_Cos((u32)PlayerDegreesRot),Math_Sin((u32)PlayerDegreesRot));
         v2 PlayerCameraDir = V2(-PlayerDir.Y*Right, PlayerDir.X*Right);
         
-        if (W32State.KeyFlags[INP_Key_Up] & INP_Flag_KeyHeld)
+        if (PlayerMoveT != -1.0f)
         {
-            RequestMoveX = PlayerDir.X * 1 * GameUpdateS;
-            RequestMoveY = PlayerDir.Y * 1 * GameUpdateS;
+            if (PlayerMoveT >= 1.0f)
+            {
+                PlayerMoveT = -1.0f;
+                PlayerP = NextPlayerP;
+            }
+            else
+            {
+                f32 T = 1.0f - PlayerMoveT;
+                T = 1.0f - T*T;
+                PlayerP.X = PlayerP.X + T*(NextPlayerP.X-PlayerP.X);
+                PlayerP.Y = PlayerP.Y + T*(NextPlayerP.Y-PlayerP.Y);
+                PlayerMoveT += GameUpdateS;
+            }
         }
         
-        if (W32State.KeyFlags[INP_Key_Q] & INP_Flag_KeyHeld)
+        if ((PlayerMoveT == -1.0f) && (W32State.KeyFlags[INP_Key_Up] & INP_Flag_KeyHeld))
         {
-            RequestMoveX = PlayerDir.Y * 1 * GameUpdateS;
-            RequestMoveY = -PlayerDir.X * 1 * GameUpdateS;
+            RequestMoveX = PlayerDir.X * 1;
+            RequestMoveY = PlayerDir.Y * 1;
         }
         
-        if (W32State.KeyFlags[INP_Key_E] & INP_Flag_KeyHeld)
+        if ((PlayerMoveT == -1.0f) && (W32State.KeyFlags[INP_Key_Q] & INP_Flag_KeyHeld))
         {
-            RequestMoveX = -PlayerDir.Y * 1 * GameUpdateS;
-            RequestMoveY = PlayerDir.X * 1 * GameUpdateS;
+            RequestMoveX = PlayerDir.Y * 1;
+            RequestMoveY = -PlayerDir.X * 1;
         }
         
-        if (W32State.KeyFlags[INP_Key_Down] & INP_Flag_KeyHeld)
+        if ((PlayerMoveT == -1.0f) && (W32State.KeyFlags[INP_Key_E] & INP_Flag_KeyHeld))
         {
-            RequestMoveX = -PlayerDir.X * 1 * GameUpdateS;
-            RequestMoveY = -PlayerDir.Y * 1 * GameUpdateS;
+            RequestMoveX = -PlayerDir.Y * 1;
+            RequestMoveY = PlayerDir.X * 1;
         }
         
+        if ((PlayerMoveT == -1.0f) && (W32State.KeyFlags[INP_Key_Down] & INP_Flag_KeyHeld))
+        {
+            RequestMoveX = -PlayerDir.X * 1;
+            RequestMoveY = -PlayerDir.Y * 1;
+        }
+        
+        if (RequestMoveY || RequestMoveX)
+        {
+            if (RequestMoveX > 0)
+            {
+                RequestMoveX = (f32)(s32)(RequestMoveX + 0.5f);
+            }
+            else
+            {
+                RequestMoveX = (f32)(s32)(RequestMoveX - 0.5f);
+            }
+            
+            if (RequestMoveY > 0)
+            {
+                RequestMoveY = (f32)(s32)(RequestMoveY + 0.5f);
+            }
+            else
+            {
+                RequestMoveY= (f32)(s32)(RequestMoveY - 0.5f);
+            }
+            
+            NextPlayerP = V2(PlayerP.X + RequestMoveX, PlayerP.Y + RequestMoveY);
+            
+            s32 NewXIDX = (s32)NextPlayerP.X;
+            s32 NewYIDX = (s32)NextPlayerP.Y;
+            
+            if ((NewXIDX < G_MaxMapDims) && (NewYIDX < G_MaxMapDims) && (NewXIDX >= 0) && (NewYIDX >= 0))
+            {
+                if (GameGrid[NewYIDX*G_MaxMapDims+NewXIDX].ID == 0)
+                {
+                    PlayerMoveT = 0.0f;
+                }
+            }
+        }
+        
+#if 0
         if (RequestMoveY || RequestMoveX)
         {
             s32 OldXIDX = (s32)PlayerP.X;
@@ -595,7 +666,7 @@ void main(void)
                 }
             }
         }
-        
+#endif
         // ------ THE ACTUAL MAIN RENDERER ------ //
         v2 RayDir0 = V2(PlayerDir.X - PlayerCameraDir.X, PlayerDir.Y - PlayerCameraDir.Y);
         v2 RayDir1 = V2(PlayerDir.X + PlayerCameraDir.X, PlayerDir.Y + PlayerCameraDir.Y);

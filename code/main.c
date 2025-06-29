@@ -3,7 +3,12 @@
 //    - [X] Sorting Sprites with respect to cam
 // - [X] Random Dungeon Generation
 //    - We will add roguelike elements here!
-//    - [ ] Scrolling Mini-Map.
+//    - [ ] Basic BSP
+//    - [ ] Mini-Map improvements.
+//       - Perhaps, Mini-Map is only enabled only on dev mode?
+//       - [X] Scrolling
+//       - [X] Raycasting Visualizer.
+//    - [ ] "Smooth Choppy" movement.
 //    - [ ] BSP + Cellular
 // - [ ] Migrate to DCSS Tiles / Old TileSets
 
@@ -631,6 +636,7 @@ void main(void)
             }
         }
         
+        u8 MinimapHitState[G_MaxMapDims*G_MaxMapDims] = {0};
         for (s32 ScreenX = 0; ScreenX < RState.Width; ++ScreenX)
         {
             f32 CameraX = ((2.0f*((f32)ScreenX / (f32)RState.Width)) - 1.0f)*(Right*W32State.AspectRatio);
@@ -685,39 +691,43 @@ void main(void)
                     XSideHit = false;
                 }
                 
-                if (((RayXInt >= 0) && (RayXInt < G_MaxMapDims)) && ((RayYInt >= 0) && (RayYInt < G_MaxMapDims)) &&
-                    (GameGrid[RayYInt * G_MaxMapDims + RayXInt].ID != 0))
+                if (((RayXInt >= 0) && (RayXInt < G_MaxMapDims)) && ((RayYInt >= 0) && (RayYInt < G_MaxMapDims)))
                 {
-                    s32 CellValue = GameGrid[RayYInt * G_MaxMapDims + RayXInt].ID - 1;
-                    f32 WallX;
-                    if (XSideHit)
+                    MinimapHitState[RayYInt * G_MaxMapDims + RayXInt] = 1;
+                    if (GameGrid[RayYInt * G_MaxMapDims + RayXInt].ID != 0)
                     {
-                        WallX = PlayerP.Y + DistanceToWall * RayDir.Y;
+                        s32 CellValue = GameGrid[RayYInt * G_MaxMapDims + RayXInt].ID - 1;
+                        //MinimapHitState[RayYInt * G_MaxMapDims + RayXInt] = 1;
+                        f32 WallX;
+                        if (XSideHit)
+                        {
+                            WallX = PlayerP.Y + DistanceToWall * RayDir.Y;
+                        }
+                        else
+                        {
+                            WallX = PlayerP.X + DistanceToWall * RayDir.X;
+                        }
+                        
+                        WallX -= (f32)((s32)WallX);
+                        w_assert((WallX>=0)&&(WallX<=1.0f));
+                        s32 TexX = (s32)(WallX * (f32)Textures[CellValue].Width);
+                        
+                        if (XSideHit && (RayDir.X > 0)) TexX = Textures[CellValue].Width - TexX - 1;
+                        if (!XSideHit && (RayDir.Y < 0)) TexX = Textures[CellValue].Width - TexX - 1;
+                        
+                        //u32 Colour = 0xffff0000;
+                        //if (XSideHit) Colour &= 0x80808080;
+                        
+                        s32 WallHeight = (s32)((f32)RState.Height / DistanceToWall);
+                        s32 DrawStartY = (RState.Height - WallHeight) / 2;
+                        s32 DrawEndY = DrawStartY + WallHeight;
+                        
+                        //R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0xff161616);
+                        R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0);
+                        R_VerticalLineFromTexture2D(&RState, ScreenX, DrawStartY, DrawEndY, Textures[CellValue], TexX);
+                        RState.DepthBuffer1D[ScreenX] = DistanceToWall;
+                        break;
                     }
-                    else
-                    {
-                        WallX = PlayerP.X + DistanceToWall * RayDir.X;
-                    }
-                    
-                    WallX -= (f32)((s32)WallX);
-                    w_assert((WallX>=0)&&(WallX<=1.0f));
-                    s32 TexX = (s32)(WallX * (f32)Textures[CellValue].Width);
-                    
-                    if (XSideHit && (RayDir.X > 0)) TexX = Textures[CellValue].Width - TexX - 1;
-                    if (!XSideHit && (RayDir.Y < 0)) TexX = Textures[CellValue].Width - TexX - 1;
-                    
-                    //u32 Colour = 0xffff0000;
-                    //if (XSideHit) Colour &= 0x80808080;
-                    
-                    s32 WallHeight = (s32)((f32)RState.Height / DistanceToWall);
-                    s32 DrawStartY = (RState.Height - WallHeight) / 2;
-                    s32 DrawEndY = DrawStartY + WallHeight;
-                    
-                    //R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0xff161616);
-                    R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0);
-                    R_VerticalLineFromTexture2D(&RState, ScreenX, DrawStartY, DrawEndY, Textures[CellValue], TexX);
-                    RState.DepthBuffer1D[ScreenX] = DistanceToWall;
-                    break;
                 }
             }
         }
@@ -839,16 +849,24 @@ void main(void)
                 s32 X = (XCell - MinimapCamOffsetX + CamDims/2)*(CellDim + Gap);
                 s32 Y = (YCell - MinimapCamOffsetY + CamDims/2)*(CellDim + Gap);
                 
-                R_WireRectangle(&RState, X, Y, CellDim, CellDim, 0xff0000ff);
-                switch (CellValue)
+                if (MinimapHitState[YCell*G_MaxMapDims+XCell])
                 {
-                    case 0: {} break;
-                    case 1: case 2:
+                    R_WireRectangle(&RState, X, Y, CellDim, CellDim, 0xffffffff);
+                    R_FillRectangle(&RState, X + InnerRectDim/2, Y + InnerRectDim/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xffffffff);
+                }
+                else
+                {
+                    R_WireRectangle(&RState, X, Y, CellDim, CellDim, 0xff0000ff);
+                    switch (CellValue)
                     {
-                        R_FillRectangle(&RState, X + InnerRectDim/2, Y + InnerRectDim/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff0000ff);
-                    } break;
-                    
-                    invalid_default_case();
+                        case 0: {} break;
+                        case 1: case 2:
+                        {
+                            R_FillRectangle(&RState, X + InnerRectDim/2, Y + InnerRectDim/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff0000ff);
+                        } break;
+                        
+                        invalid_default_case();
+                    }
                 }
             }
         }

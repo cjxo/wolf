@@ -9,13 +9,18 @@
 //       - [X] Scrolling
 //       - [X] Raycasting Visualizer.
 //    - [X] "Smooth Choppy" movement.
-// - [ ] Migrate to DCSS Tiles / Old TileSets
+// - [X] Migrate to DCSS Tiles / Old TileSets
+//    - [X] Just load em in some sort of list, for now.
+// - [ ] Switch to D3D11 Renderer
+//    - [ ] Try Creating an atlas from the DCSS tileset structure
+//    - [ ] Try rendering DCSS in a 2D surface temporarily for testing purposes.
 // - [ ] Generation improvements
 //    - [ ] BSP + Cellular
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <timeapi.h>
+#include <shlwapi.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "./ext/stb_image.h"
@@ -260,6 +265,117 @@ typedef struct
     s32 ID;
 } G_Tile;
 
+typedef u32 G_AssetType;
+enum
+{
+    G_AssetType_Folder,
+    G_AssetType_Texture2D,
+    G_AssetType_Count,
+};
+typedef struct G_Asset G_Asset;
+struct G_Asset
+{
+    G_AssetType Type;
+    String_U8_Const Name;
+    R_Texture2D Texture;
+    G_Asset *NextSibling, *PrevSibling;
+    G_Asset *FirstChild, *LastChild;
+};
+
+inline static G_Asset *
+G_CreateAsset(M_Arena *Arena, G_AssetType Type, String_U8_Const Name)
+{
+    G_Asset *Result = m_arena_push(Arena, G_Asset);
+    Result->Type = Type;
+    Result->Name = Str8_Copy(Name, Arena);
+    return(Result);
+}
+
+static void
+G_LoadDCSSTiles(G_Asset **RootAsset, M_Arena *Arena, char *FolderName)
+{
+    HANDLE SearchHandle;
+    WIN32_FIND_DATAA FindData;
+    char Buffer[MAX_PATH];
+    
+    PathCombineA(Buffer, FolderName, "*");
+    SearchHandle = FindFirstFileA(Buffer, &FindData);
+    w_assert(SearchHandle != INVALID_HANDLE_VALUE);
+    
+    do
+    {
+        if ((FindData.cFileName[0] != '.') && (FindData.cFileName[1] != '.'))
+        {
+            if (FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            {
+                PathCombineA(Buffer, FolderName, FindData.cFileName);
+                G_Asset *Asset = G_CreateAsset(Arena, G_AssetType_Folder, Str8_FromCSTR(FindData.cFileName));
+                
+                dll_push_back_np((*RootAsset)->FirstChild,
+                                 (*RootAsset)->LastChild,
+                                 Asset,
+                                 NextSibling,
+                                 PrevSibling);
+                
+                G_LoadDCSSTiles(&Asset, Arena, Buffer);
+            }
+            else
+            {
+                G_Asset *Asset = G_CreateAsset(Arena, G_AssetType_Texture2D, Str8_FromCSTR(FindData.cFileName));
+                
+                dll_push_back_np((*RootAsset)->FirstChild,
+                                 (*RootAsset)->LastChild,
+                                 Asset,
+                                 NextSibling,
+                                 PrevSibling);
+            }
+        }
+    } while (FindNextFileA(SearchHandle, &FindData));
+    
+    FindClose(SearchHandle);
+}
+
+static void
+G_Debug_PrintDCSSTiles(G_Asset *Root, u32 Depth)
+{
+    char Buffer[256];
+    for (G_Asset *Asset = Root->FirstChild;
+         Asset;
+         Asset = Asset->NextSibling)
+    {
+        switch (Asset->Type)
+        {
+            case G_AssetType_Folder:
+            {
+                wsprintfA(Buffer, "[[%s]]\n", Asset->Name.S);
+                for (u32 DepthIdx = 0; DepthIdx < Depth; ++DepthIdx)
+                {
+                    OutputDebugStringA(" ");
+                }
+                OutputDebugStringA(Buffer);
+                G_Debug_PrintDCSSTiles(Asset, Depth + 1);
+                for (u32 DepthIdx = 0; DepthIdx < Depth; ++DepthIdx)
+                {
+                    OutputDebugStringA(" ");
+                }
+                OutputDebugStringA(Buffer);
+            } break;
+            
+            case G_AssetType_Texture2D:
+            {
+                wsprintfA(Buffer, "[File]: %s\n", Asset->Name.S);
+                for (u32 DepthIdx = 0; DepthIdx < Depth; ++DepthIdx)
+                {
+                    OutputDebugStringA(" ");
+                }
+                OutputDebugStringA(Buffer);
+            } break;
+            
+            invalid_default_case();
+        }
+    }
+}
+
 static void
 __G_GEN_BSP(PRNG *Gen, G_Tile *Tiles, s32 TileMapWidth, s32 TileMapHeight, s32 StartGenX, s32 StartGenY, s32 EndGenX, s32 EndGenY, s32 MinRoomW, s32 MinRoomH)
 {
@@ -410,7 +526,8 @@ G_GEN_BSP(PRNG *Gen, G_Tile *Tiles, u32 Width, u32 Height, s32 MinRoomW, s32 Min
 }
 
 #define G_MaxMapDims 32
-void main(void)
+s32 __stdcall
+WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmd, s32 nShowCmd)
 {
     SetProcessDPIAware();
     timeBeginPeriod(1);
@@ -435,27 +552,6 @@ void main(void)
     QueryPerformanceCounter(&BeginPerformanceCounter);
     
     G_Tile GameGrid[G_MaxMapDims*G_MaxMapDims];
-#if 0
-    =  {
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    };
-#endif
-    
     v2 PlayerP = V2(8.5f, 8.5f), NextPlayerP;
     f32 PlayerMoveT = -1.0f;
     
@@ -475,8 +571,8 @@ void main(void)
     
     G_Sprite StaticSprites[] =
     {
-        G_CreateSprite(V2(6, 3), SpriteTextures[1]),
-        G_CreateSprite(V2(3, 3), SpriteTextures[0]),
+        G_CreateSprite(V2(6.5f, 3.5f), SpriteTextures[1]),
+        G_CreateSprite(V2(3.5f, 3.5f), SpriteTextures[0]),
     };
     
     f32 Fov = 66.0f * (3.14159f/180.0f);
@@ -488,6 +584,13 @@ void main(void)
     PRNG_Seed(&RandGen, 37);
     G_GEN_BSP(&RandGen, GameGrid, G_MaxMapDims, G_MaxMapDims, 10, 10);
     
+    M_Arena *Arena = M_ArenaReserve(gb(1));
+    G_Asset *DCSSAssetsRootFolder = G_CreateAsset(Arena, G_AssetType_Folder, str8("crawl-tiles"));
+    G_LoadDCSSTiles(&DCSSAssetsRootFolder, Arena, "../data/textures/crawl-tiles");
+    
+    G_Debug_PrintDCSSTiles(DCSSAssetsRootFolder, 0);
+    
+    //ExitProcess(0);
     forever
     {
         MSG Message;
@@ -541,7 +644,7 @@ void main(void)
                 PlayerDegreesRot = PlayerDegreesRot + (1.0f-T*T)*(NextPlayerDegreesRot - PlayerDegreesRot);
             }
         }
-        else if (W32State.KeyFlags[INP_Key_Left] & INP_Flag_KeyPressed)
+        else if (W32State.KeyFlags[INP_Key_Left] & INP_Flag_KeyHeld)
         {
             PlayerDegreesRotT = 0.0f;
             NextPlayerDegreesRot = PlayerDegreesRot - 45;
@@ -551,7 +654,7 @@ void main(void)
                 NextPlayerDegreesRot = 315;
             }
         }
-        else if (W32State.KeyFlags[INP_Key_Right] & INP_Flag_KeyPressed)
+        else if (W32State.KeyFlags[INP_Key_Right] & INP_Flag_KeyHeld)
         {
             PlayerDegreesRotT = 0.0f;
             NextPlayerDegreesRot = PlayerDegreesRot + 45;
@@ -583,7 +686,7 @@ void main(void)
                 T = 1.0f - T*T;
                 PlayerP.X = PlayerP.X + T*(NextPlayerP.X-PlayerP.X);
                 PlayerP.Y = PlayerP.Y + T*(NextPlayerP.Y-PlayerP.Y);
-                PlayerMoveT += GameUpdateS;
+                PlayerMoveT += GameUpdateS*2;
             }
         }
         
@@ -645,28 +748,6 @@ void main(void)
             }
         }
         
-#if 0
-        if (RequestMoveY || RequestMoveX)
-        {
-            s32 OldXIDX = (s32)PlayerP.X;
-            s32 OldYIDX = (s32)PlayerP.Y;
-            
-            f32 X = PlayerP.X + RequestMoveX;
-            f32 Y = PlayerP.Y + RequestMoveY;
-            
-            s32 NewXIDX = (s32)X;
-            s32 NewYIDX = (s32)Y;
-            
-            if ((NewXIDX < G_MaxMapDims) && (NewYIDX < G_MaxMapDims) && (NewXIDX >= 0) && (NewYIDX >= 0))
-            {
-                if (GameGrid[NewYIDX*G_MaxMapDims+NewXIDX].ID == 0)
-                {
-                    PlayerP.X = X;
-                    PlayerP.Y = Y;
-                }
-            }
-        }
-#endif
         // ------ THE ACTUAL MAIN RENDERER ------ //
         v2 RayDir0 = V2(PlayerDir.X - PlayerCameraDir.X, PlayerDir.Y - PlayerCameraDir.Y);
         v2 RayDir1 = V2(PlayerDir.X + PlayerCameraDir.X, PlayerDir.Y + PlayerCameraDir.Y);
@@ -786,14 +867,10 @@ void main(void)
                         if (XSideHit && (RayDir.X > 0)) TexX = Textures[CellValue].Width - TexX - 1;
                         if (!XSideHit && (RayDir.Y < 0)) TexX = Textures[CellValue].Width - TexX - 1;
                         
-                        //u32 Colour = 0xffff0000;
-                        //if (XSideHit) Colour &= 0x80808080;
-                        
                         s32 WallHeight = (s32)((f32)RState.Height / DistanceToWall);
                         s32 DrawStartY = (RState.Height - WallHeight) / 2;
                         s32 DrawEndY = DrawStartY + WallHeight;
                         
-                        //R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0xff161616);
                         R_VerticalLine(&RState, ScreenX, 0, DrawStartY, 0);
                         R_VerticalLineFromTexture2D(&RState, ScreenX, DrawStartY, DrawEndY, Textures[CellValue], TexX);
                         RState.DepthBuffer1D[ScreenX] = DistanceToWall;
@@ -946,7 +1023,7 @@ void main(void)
             s32 X = (((s32)PlayerP.X - MinimapCamOffsetX + CamDims/2)*(CellDim + Gap));
             s32 Y = (((s32)PlayerP.Y - MinimapCamOffsetY + CamDims/2)*(CellDim + Gap));
             
-            R_FillRectangle(&RState, X + InnerRectDim/2 - (CellDim - InnerRectDim)/2, Y + InnerRectDim/2 - (CellDim - InnerRectDim)/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff00ff00);
+            R_FillRectangle(&RState, X + InnerRectDim - (CellDim - InnerRectDim)/2, Y + InnerRectDim - (CellDim - InnerRectDim)/2, CellDim - InnerRectDim, CellDim - InnerRectDim, 0xff00ff00);
         }
         
         HDC Hdc = GetDC(W32State.WindowHandle);
